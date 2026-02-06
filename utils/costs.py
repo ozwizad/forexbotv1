@@ -24,14 +24,14 @@ def apply_entry_cost(entry_price, direction):
     Returns:
         Adjusted entry price after costs
     """
-    total_spread = SPREAD_XAU + SLIPPAGE_XAU
+    total_cost = SPREAD_XAU + SLIPPAGE_XAU
     
     if direction == 'BUY':
-        # Buying at ask (higher price)
-        return entry_price + total_spread / 2
+        # Buying at ask (higher price) - pay full spread
+        return entry_price + total_cost
     else:
-        # Selling at bid (lower price)
-        return entry_price - total_spread / 2
+        # Selling at bid (lower price) - receive less by full spread
+        return entry_price - total_cost
 
 
 def apply_exit_cost(exit_price, direction):
@@ -48,14 +48,14 @@ def apply_exit_cost(exit_price, direction):
     Returns:
         Adjusted exit price after costs
     """
-    total_spread = SPREAD_XAU + SLIPPAGE_XAU
+    total_cost = SPREAD_XAU + SLIPPAGE_XAU
     
     if direction == 'BUY':
-        # Closing long position (selling), get bid price (lower)
-        return exit_price - total_spread / 2
+        # Closing long position (selling), get bid price (lower) - pay full spread
+        return exit_price - total_cost
     else:
-        # Closing short position (buying), pay ask price (higher)
-        return exit_price + total_spread / 2
+        # Closing short position (buying), pay ask price (higher) - pay full spread
+        return exit_price + total_cost
 
 
 def calculate_commission(size):

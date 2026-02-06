@@ -4,6 +4,13 @@ Dynamically adjusts position sizing based on drawdown and consecutive losses.
 Provides protection against deep drawdowns and helps preserve capital during losing streaks.
 """
 
+# Risk management thresholds
+DRAWDOWN_STOP_THRESHOLD = 0.15  # Stop trading at 15% drawdown
+DRAWDOWN_HIGH_THRESHOLD = 0.10  # Reduce risk to 50% at 10% drawdown
+DRAWDOWN_MED_THRESHOLD = 0.05   # Reduce risk to 75% at 5% drawdown
+CONSECUTIVE_LOSS_HIGH = 5       # Reduce risk to 25% after 5 consecutive losses
+CONSECUTIVE_LOSS_MED = 3        # Reduce risk to 50% after 3 consecutive losses
+
 
 class AdaptiveRiskManager:
     """
@@ -46,21 +53,21 @@ class AdaptiveRiskManager:
         drawdown = (self.peak_balance - current_balance) / self.peak_balance
         
         # Stop trading if drawdown >= 15%
-        if drawdown >= 0.15:
+        if drawdown >= DRAWDOWN_STOP_THRESHOLD:
             return 0.0
         
         # Reduce risk based on drawdown levels
-        if drawdown >= 0.10:
+        if drawdown >= DRAWDOWN_HIGH_THRESHOLD:
             risk_multiplier = 0.5
-        elif drawdown >= 0.05:
+        elif drawdown >= DRAWDOWN_MED_THRESHOLD:
             risk_multiplier = 0.75
         else:
             risk_multiplier = 1.0
         
         # Further reduce risk based on consecutive losses
-        if self.consecutive_losses >= 5:
+        if self.consecutive_losses >= CONSECUTIVE_LOSS_HIGH:
             risk_multiplier *= 0.25
-        elif self.consecutive_losses >= 3:
+        elif self.consecutive_losses >= CONSECUTIVE_LOSS_MED:
             risk_multiplier *= 0.5
         
         return self.base_risk * risk_multiplier

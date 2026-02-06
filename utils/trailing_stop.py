@@ -3,6 +3,11 @@ Trailing Stop Management
 Implements breakeven and trailing stop mechanisms to protect profits.
 """
 
+# Trailing stop configuration
+BREAKEVEN_ATR_MULT = 1.0   # Move to breakeven when profit >= 1×ATR
+TRAILING_ATR_MULT = 1.5    # Start trailing when profit >= 1.5×ATR
+TRAILING_DISTANCE_ATR = 1.0  # Trail stop at 1×ATR behind price
+
 
 def manage_trailing_stop(position, current_high, current_low, current_atr):
     """
@@ -27,13 +32,13 @@ def manage_trailing_stop(position, current_high, current_low, current_atr):
         unrealized = current_high - position['entry_price']
         
         # Breakeven: Move SL to entry when 1×ATR in profit
-        if unrealized >= current_atr * 1.0:
+        if unrealized >= current_atr * BREAKEVEN_ATR_MULT:
             new_sl = max(position['sl'], position['entry_price'])
             position['sl'] = new_sl
         
         # Trailing: When 1.5×ATR in profit, trail at 1×ATR behind
-        if unrealized >= current_atr * 1.5:
-            trail_sl = current_high - (current_atr * 1.0)
+        if unrealized >= current_atr * TRAILING_ATR_MULT:
+            trail_sl = current_high - (current_atr * TRAILING_DISTANCE_ATR)
             position['sl'] = max(position['sl'], trail_sl)
     
     elif position['type'] == 'SELL':
@@ -41,13 +46,13 @@ def manage_trailing_stop(position, current_high, current_low, current_atr):
         unrealized = position['entry_price'] - current_low
         
         # Breakeven: Move SL to entry when 1×ATR in profit
-        if unrealized >= current_atr * 1.0:
+        if unrealized >= current_atr * BREAKEVEN_ATR_MULT:
             new_sl = min(position['sl'], position['entry_price'])
             position['sl'] = new_sl
         
         # Trailing: When 1.5×ATR in profit, trail at 1×ATR behind
-        if unrealized >= current_atr * 1.5:
-            trail_sl = current_low + (current_atr * 1.0)
+        if unrealized >= current_atr * TRAILING_ATR_MULT:
+            trail_sl = current_low + (current_atr * TRAILING_DISTANCE_ATR)
             position['sl'] = min(position['sl'], trail_sl)
     
     return position

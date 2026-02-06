@@ -21,6 +21,10 @@ from utils.trailing_stop import manage_trailing_stop
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("XAU_Backtest")
 
+# Constants for metrics calculation
+TRADING_DAYS_PER_YEAR = 252
+HOURS_PER_DAY = 24
+
 def run_backtest():
     # 1. Load Data
     data_file = r"c:\Users\Ozai\Desktop\Klasörler\Protop\XAUUSD_H1.xlsx"
@@ -228,7 +232,7 @@ def run_backtest():
     # Sharpe Ratio (approximate using returns)
     returns = equity_series.pct_change().dropna()
     if len(returns) > 0 and returns.std() > 0:
-        sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252 * 24)  # Annualized for hourly data
+        sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(TRADING_DAYS_PER_YEAR * HOURS_PER_DAY)  # Annualized for hourly data
     else:
         sharpe_ratio = 0.0
     

@@ -6,6 +6,14 @@ Requires at least 2 out of 3 confirmations for trade entry.
 
 import numpy as np
 
+# Confluence filter thresholds
+RSI_LOWER_BOUND = 30        # Avoid oversold conditions
+RSI_UPPER_BOUND = 70        # Avoid overbought conditions
+VOLATILITY_REGIME_MIN = 0.5  # Minimum acceptable ATR ratio
+VOLATILITY_REGIME_MAX = 1.5  # Maximum acceptable ATR ratio
+VOLATILITY_LOOKBACK = 50     # Periods to calculate average ATR
+CONFLUENCE_MIN_SCORE = 2     # Minimum confirmations required (out of 3)
+
 
 def ema(data, period):
     """
@@ -84,19 +92,19 @@ def confluence_check(df, i, direction):
     
     # 2. RSI Filter: Not in extreme zones (avoid extremes)
     if 'RSI' in df.columns:
-        if direction == 'BUY' and 30 < row['RSI'] < 70:
+        if direction == 'BUY' and RSI_LOWER_BOUND < row['RSI'] < RSI_UPPER_BOUND:
             score += 1
-        elif direction == 'SELL' and 30 < row['RSI'] < 70:
+        elif direction == 'SELL' and RSI_LOWER_BOUND < row['RSI'] < RSI_UPPER_BOUND:
             score += 1
     
     # 3. Volatility Regime: Normal range (0.5x to 1.5x average ATR)
-    if 'ATR' in df.columns and i >= 50:
+    if 'ATR' in df.columns and i >= VOLATILITY_LOOKBACK:
         current_atr = row['ATR']
-        avg_atr = df['ATR'].iloc[i-50:i].mean()
+        avg_atr = df['ATR'].iloc[i-VOLATILITY_LOOKBACK:i].mean()
         if avg_atr > 0:
             vol_ratio = current_atr / avg_atr
-            if 0.5 < vol_ratio < 1.5:
+            if VOLATILITY_REGIME_MIN < vol_ratio < VOLATILITY_REGIME_MAX:
                 score += 1
     
     # Require at least 2 out of 3 confirmations
-    return score >= 2
+    return score >= CONFLUENCE_MIN_SCORE
