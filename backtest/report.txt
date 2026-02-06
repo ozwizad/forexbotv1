@@ -1,0 +1,19 @@
+
+==================================================
+BACKTEST REPORT: EURUSD H1
+Strategy: Mean Reversion V1
+Range: All Data       
+==================================================
+Initial Balance: $10000.0
+Final Balance:   $143070.99
+Net Profit:      $133070.99 (1330.71%)
+
+Total Trades:    142
+Win Rate:        37.32%
+Profit Factor:   4.74
+Max Drawdown:    57.17%
+
+Winners:         53 (Avg: $3182.38)
+Losers:          89 (Avg: $-399.94)
+==================================================
+        
