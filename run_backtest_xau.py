@@ -2,6 +2,7 @@
 import sys
 import os
 import pandas as pd
+import numpy as np
 import logging
 from datetime import datetime
 
@@ -12,10 +13,17 @@ from data.csv_loader import CSVLoader
 from strategy.xau_volsnap import XAUVolSnapStrategy
 from strategy.interface import Signal
 from risk.monitor import RiskMonitor
+from risk.adaptive_risk import AdaptiveRiskManager
+from utils.costs import apply_entry_cost, apply_exit_cost, calculate_commission
+from utils.trailing_stop import manage_trailing_stop
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("XAU_Backtest")
+
+# Constants for metrics calculation
+TRADING_DAYS_PER_YEAR = 252
+HOURS_PER_DAY = 24
 
 def run_backtest():
     # 1. Load Data
@@ -44,7 +52,8 @@ def run_backtest():
     positions = [] # List of dicts: {type, entry_price, sl, tp, size, entry_time}
     trade_history = []
     
-    risk_per_trade = 0.01 # 1%
+    # Initialize adaptive risk manager
+    risk_manager = AdaptiveRiskManager(base_risk=0.01)
     
     # For reporting
     equity_curve = [10000.0]
@@ -66,40 +75,53 @@ def run_backtest():
         # --- Manage Open Positions (Check SL/TP) ---
         active_positions = []
         for pos in positions:
+            # Apply trailing stop management
+            pos = manage_trailing_stop(pos, current_high, current_low, current_atr)
+            
             pdl = 0
             closed = False
             reason = ""
             
             if pos['type'] == 'BUY':
                 if current_low <= pos['sl']:
-                    # SL Hit
-                    exit_price = pos['sl'] # Assuming no slippage as per req
+                    # SL Hit - apply exit costs
+                    exit_price = apply_exit_cost(pos['sl'], 'BUY')
                     pdl = (exit_price - pos['entry_price']) * pos['size']
+                    # Subtract commission
+                    pdl -= calculate_commission(pos['size'])
                     closed = True
                     reason = "SL"
                 elif current_high >= pos['tp']:
-                    # TP Hit
-                    exit_price = pos['tp']
+                    # TP Hit - apply exit costs
+                    exit_price = apply_exit_cost(pos['tp'], 'BUY')
                     pdl = (exit_price - pos['entry_price']) * pos['size']
+                    # Subtract commission
+                    pdl -= calculate_commission(pos['size'])
                     closed = True
                     reason = "TP"
                     
             elif pos['type'] == 'SELL':
                 if current_high >= pos['sl']:
-                    # SL Hit
-                    exit_price = pos['sl']
+                    # SL Hit - apply exit costs
+                    exit_price = apply_exit_cost(pos['sl'], 'SELL')
                     pdl = (pos['entry_price'] - exit_price) * pos['size']
+                    # Subtract commission
+                    pdl -= calculate_commission(pos['size'])
                     closed = True
                     reason = "SL"
                 elif current_low <= pos['tp']:
-                    # TP Hit
-                    exit_price = pos['tp']
+                    # TP Hit - apply exit costs
+                    exit_price = apply_exit_cost(pos['tp'], 'SELL')
                     pdl = (pos['entry_price'] - exit_price) * pos['size']
+                    # Subtract commission
+                    pdl -= calculate_commission(pos['size'])
                     closed = True
                     reason = "TP"
             
             if closed:
                 balance += pdl
+                # Record result for adaptive risk manager
+                risk_manager.record_result(pdl)
                 trade_history.append({
                     'entry_time': pos['entry_time'],
                     'exit_time': current_time,
@@ -131,55 +153,54 @@ def run_backtest():
             signal = strategy.categorize_signal(row, prev_row)
             
             if signal != Signal.HOLD:
-                # Calculate Size
-                # Risk 1% of Balance
-                risk_amt = balance * risk_per_trade
+                # Get adaptive risk (may be 0 if drawdown too high)
+                risk_per_trade = risk_manager.get_risk(balance)
                 
-                # SL Distance
-                # Buy: Entry - SL
-                # Sell: SL - Entry
-                # Strategy defines SL as Entry +/- 1.2 * ATR
-                sl_dist = current_atr * 1.2
-                
-                if sl_dist == 0:
-                    continue
+                if risk_per_trade > 0:
+                    # Calculate Size
+                    risk_amt = balance * risk_per_trade
                     
-                # Size = Risk / Distance
-                # NOTE: XAUUSD contract size usually 100 or 1 etc.
-                # Assuming standard lot = 100 oz? or just raw price diff logic?
-                # User says "1% risk per trade".
-                # PnL = (Exit - Entry) * Size
-                # Risk = (Entry - SL) * Size = sl_dist * Size
-                # Size = Risk / sl_dist
-                size = risk_amt / sl_dist
-                
-                if signal == Signal.BUY:
-                    entry_price = current_close
-                    sl = entry_price - (current_atr * 1.2)
-                    tp = entry_price + (current_atr * 1.0)
+                    # FIXED: Improved Risk/Reward Ratio
+                    # SL Distance: 1.5 * ATR (was 1.2)
+                    # TP Distance: 3.0 * ATR (was 1.0)
+                    # This gives minimum 1:2 Risk/Reward ratio
+                    sl_dist = current_atr * 1.5
                     
-                    positions.append({
-                        'type': 'BUY',
-                        'entry_price': entry_price,
-                        'sl': sl,
-                        'tp': tp,
-                        'size': size,
-                        'entry_time': current_time
-                    })
+                    if sl_dist == 0:
+                        continue
+                        
+                    # Size = Risk / Distance
+                    size = risk_amt / sl_dist
                     
-                elif signal == Signal.SELL:
-                    entry_price = current_close
-                    sl = entry_price + (current_atr * 1.2)
-                    tp = entry_price - (current_atr * 1.0)
-                    
-                    positions.append({
-                        'type': 'SELL',
-                        'entry_price': entry_price,
-                        'sl': sl,
-                        'tp': tp,
-                        'size': size,
-                        'entry_time': current_time
-                    })
+                    if signal == Signal.BUY:
+                        # Apply entry costs (spread + slippage)
+                        entry_price = apply_entry_cost(current_close, 'BUY')
+                        sl = entry_price - (current_atr * 1.5)
+                        tp = entry_price + (current_atr * 3.0)
+                        
+                        positions.append({
+                            'type': 'BUY',
+                            'entry_price': entry_price,
+                            'sl': sl,
+                            'tp': tp,
+                            'size': size,
+                            'entry_time': current_time
+                        })
+                        
+                    elif signal == Signal.SELL:
+                        # Apply entry costs (spread + slippage)
+                        entry_price = apply_entry_cost(current_close, 'SELL')
+                        sl = entry_price + (current_atr * 1.5)
+                        tp = entry_price - (current_atr * 3.0)
+                        
+                        positions.append({
+                            'type': 'SELL',
+                            'entry_price': entry_price,
+                            'sl': sl,
+                            'tp': tp,
+                            'size': size,
+                            'entry_time': current_time
+                        })
 
     # End of Loop
     
@@ -207,9 +228,29 @@ def run_backtest():
     drawdown = (equity_series - rolling_max) / rolling_max * 100
     max_drawdown = drawdown.min() # Negative value
     
-    print("-" * 40)
-    print("BACKTEST RESULTS: XAUUSD Volatility Snap v1")
-    print("-" * 40)
+    # Enhanced Diagnostics
+    # Sharpe Ratio (approximate using returns)
+    returns = equity_series.pct_change().dropna()
+    if len(returns) > 0 and returns.std() > 0:
+        sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(TRADING_DAYS_PER_YEAR * HOURS_PER_DAY)  # Annualized for hourly data
+    else:
+        sharpe_ratio = 0.0
+    
+    # Calmar Ratio (Return / Max Drawdown)
+    total_return = (balance - 10000.0) / 10000.0 * 100
+    if abs(max_drawdown) > 0:
+        calmar_ratio = total_return / abs(max_drawdown)
+    else:
+        calmar_ratio = 0.0
+    
+    # Average Win/Loss
+    avg_win = wins['pnl'].mean() if len(wins) > 0 else 0
+    avg_loss = losses['pnl'].mean() if len(losses) > 0 else 0
+    
+    print("-" * 50)
+    print("BACKTEST RESULTS: XAUUSD Volatility Snap v2")
+    print("(With Adaptive Risk, Costs, Trailing Stops)")
+    print("-" * 50)
     print(f"Data Range: {df['time'].iloc[0]} to {df['time'].iloc[-1]}")
     print(f"Total Trades: {total_trades}")
     print(f"Win Rate:     {win_rate:.2f}%")
@@ -217,7 +258,15 @@ def run_backtest():
     print(f"Net PnL:      ${net_pnl:.2f}")
     print(f"Max Drawdown: {max_drawdown:.2f}%")
     print(f"Final Balance:${balance:.2f}")
-    print("-" * 40)
+    print(f"Total Return: {total_return:.2f}%")
+    print("-" * 50)
+    print("Enhanced Metrics:")
+    print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+    print(f"Calmar Ratio: {calmar_ratio:.2f}")
+    print(f"Avg Win:      ${avg_win:.2f}")
+    print(f"Avg Loss:     ${avg_loss:.2f}")
+    print(f"Risk/Reward:  1:{(avg_win/abs(avg_loss)):.2f}" if avg_loss != 0 else "Risk/Reward:  N/A")
+    print("-" * 50)
 
 if __name__ == "__main__":
     run_backtest()
