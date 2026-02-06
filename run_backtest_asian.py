@@ -29,7 +29,7 @@ HOURS_PER_DAY = 24
 
 def run_backtest():
     # 1. Load Data
-    data_file = r"c:\Users\Ozai\Desktop\Klasörler\Protop\XAUUSD_H1.xlsx"
+    data_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "XAUUSD_H1.xlsx")
     if not os.path.exists(data_file):
         logger.error(f"File not found: {data_file}")
         return
