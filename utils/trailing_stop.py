@@ -4,9 +4,9 @@ Implements breakeven and trailing stop mechanisms to protect profits.
 """
 
 # Trailing stop configuration
-BREAKEVEN_ATR_MULT = 1.0   # Move to breakeven when profit >= 1×ATR
-TRAILING_ATR_MULT = 1.5    # Start trailing when profit >= 1.5×ATR
-TRAILING_DISTANCE_ATR = 1.0  # Trail stop at 1×ATR behind price
+BREAKEVEN_ATR_MULT = 1.5   # Move to breakeven when profit >= 1.5×ATR
+TRAILING_ATR_MULT = 2.0    # Start trailing when profit >= 2.0×ATR
+TRAILING_DISTANCE_ATR = 1.0  # Trail stop at 1×ATR behind price (unchanged)
 
 
 def manage_trailing_stop(position, current_high, current_low, current_atr):

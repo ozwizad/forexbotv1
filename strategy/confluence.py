@@ -90,11 +90,11 @@ def confluence_check(df, i, direction):
         elif direction == 'SELL' and row['EMA_50'] < row['EMA_200']:
             score += 1
     
-    # 2. RSI Filter: Not in extreme zones (avoid extremes)
+    # 2. RSI Filter: Direction-aware (compatible with mean-reversion strategies)
     if 'RSI' in df.columns:
-        if direction == 'BUY' and RSI_LOWER_BOUND < row['RSI'] < RSI_UPPER_BOUND:
+        if direction == 'BUY' and row['RSI'] < RSI_UPPER_BOUND:
             score += 1
-        elif direction == 'SELL' and RSI_LOWER_BOUND < row['RSI'] < RSI_UPPER_BOUND:
+        elif direction == 'SELL' and row['RSI'] > RSI_LOWER_BOUND:
             score += 1
     
     # 3. Volatility Regime: Normal range (0.5x to 1.5x average ATR)
